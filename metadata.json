@@ -1,0 +1,5 @@
+{
+  "name": "CourtVision AI - Basketball Analytics",
+  "description": "A high-performance basketball quantitative analysis and predictive modeling tool powered by Gemini. Analyze game data, team statistics, and player availability to predict winners, scores, and total points across NBA and global leagues.",
+  "requestFramePermissions": []
+}

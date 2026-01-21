@@ -17,7 +17,9 @@ import {
   Trash2,
   Clock,
   Search,
-  Zap
+  Zap,
+  Radio,
+  Wifi
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -26,11 +28,37 @@ const App: React.FC = () => {
   const [isScraping, setIsScraping] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; message?: string } | null>(null);
   
+  // Live Feed State
+  const [isLiveFeedActive, setIsLiveFeedActive] = useState(false);
+  
   const [sessionPredictions, setSessionPredictions] = useState<PredictionResult[]>([]);
   const [savedHistory, setSavedHistory] = useState<PredictionResult[]>(() => {
     const saved = localStorage.getItem('courtvision_history');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Team Logo State
+  const [teamLogos, setTeamLogos] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('courtvision_logos');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Dynamic Date Logic
+  const todayDate = useMemo(() => new Date(), []);
+  const displayDate = todayDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+  const queryDate = todayDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('courtvision_logos', JSON.stringify(teamLogos));
+    } catch (e) {
+      console.warn("LocalStorage full or error saving logos", e);
+    }
+  }, [teamLogos]);
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'Newest' | 'Confidence'>('Newest');
@@ -46,6 +74,91 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('courtvision_history', JSON.stringify(savedHistory));
   }, [savedHistory]);
+
+  // LIVE FEED SIMULATION ENGINE
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+
+    if (isLiveFeedActive && sessionPredictions.length > 0) {
+      interval = setInterval(() => {
+        setSessionPredictions(prev => {
+          const next = [...prev];
+          // Pick a random game to update
+          const idx = Math.floor(Math.random() * next.length);
+          const game = { ...next[idx] };
+          
+          if (!game.isLive) {
+            game.isLive = true;
+            game.currentPeriod = 1;
+            game.currentClock = "11:58";
+            game.liveEvents = [{ id: Date.now().toString(), time: "11:58", description: "Tip-off! Game has started.", type: 'period' }];
+          } else {
+            // Parse clock
+            let [min, sec] = (game.currentClock || "12:00").split(':').map(Number);
+            let totalSec = min * 60 + sec;
+            
+            if (totalSec > 0) {
+              const drop = Math.floor(Math.random() * 20) + 10; // Drop 10-30 seconds
+              totalSec = Math.max(0, totalSec - drop);
+              min = Math.floor(totalSec / 60);
+              sec = totalSec % 60;
+              game.currentClock = `${min}:${sec < 10 ? '0'+sec : sec}`;
+
+              // Random Event
+              const eventChance = Math.random();
+              const teamA = game.matchup.split(' vs ')[0];
+              const teamB = game.matchup.split(' vs ')[1];
+
+              if (eventChance > 0.6) {
+                 const isTeamA = Math.random() > 0.5;
+                 const points = Math.random() > 0.7 ? 3 : 2;
+                 const scorer = isTeamA ? teamA : teamB;
+                 
+                 if (isTeamA) game.predictedScore.teamA += points;
+                 else game.predictedScore.teamB += points;
+
+                 game.liveEvents = [
+                   ...(game.liveEvents || []), 
+                   { 
+                     id: Date.now().toString(), 
+                     time: game.currentClock, 
+                     description: `${scorer} scores ${points} points!`, 
+                     type: 'score' 
+                   }
+                 ];
+              } else if (eventChance < 0.2) {
+                 game.liveEvents = [
+                   ...(game.liveEvents || []), 
+                   { 
+                     id: Date.now().toString(), 
+                     time: game.currentClock, 
+                     description: "Defensive rebound secured.", 
+                     type: 'score' 
+                   }
+                 ];
+              }
+            } else {
+               // End of Period logic could go here, for now just reset to next period
+               if ((game.currentPeriod || 1) < 4) {
+                 game.currentPeriod = (game.currentPeriod || 1) + 1;
+                 game.currentClock = "12:00";
+                 game.liveEvents = [
+                   ...(game.liveEvents || []), 
+                   { id: Date.now().toString(), time: "12:00", description: `Start of Q${game.currentPeriod}`, type: 'period' }
+                 ];
+               }
+            }
+          }
+          
+          next[idx] = game;
+          return next;
+        });
+      }, 2000); // Update frequency
+    }
+
+    return () => clearInterval(interval);
+  }, [isLiveFeedActive, sessionPredictions.length]);
+
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -65,8 +178,8 @@ const App: React.FC = () => {
     setIsScraping(true);
     setBulkProgress({ current: 0, total: 100, message: "Surveilling global professional schedules..." });
     try {
-      const today = "20th January 2026";
-      const games = await fetchLiveGames(today);
+      // Use dynamic date derived from system time
+      const games = await fetchLiveGames(queryDate);
       
       if (games.length === 0) {
         alert("No high-profile games detected for this slate. Try again later.");
@@ -105,6 +218,28 @@ const App: React.FC = () => {
 
   const handleClearHistory = () => {
     if (confirm("Wipe all saved reports?")) setSavedHistory([]);
+  };
+
+  const handleLogoUpload = (teamName: string, file: File) => {
+    // Limit size roughly to avoid hitting localStorage limits too fast
+    if (file.size > 500000) {
+      alert("Image is too large. Please use a file smaller than 500KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      setTeamLogos(prev => ({ ...prev, [teamName]: result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoReset = (teamName: string) => {
+    setTeamLogos(prev => {
+      const next = { ...prev };
+      delete next[teamName];
+      return next;
+    });
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,7 +329,7 @@ const App: React.FC = () => {
           <div>
             <h1 className="brand-font text-4xl font-black text-white tracking-tight uppercase italic">Match Analytics Engine</h1>
             <p className="text-slate-500 mt-2 flex items-center gap-3 font-black text-[10px] uppercase tracking-[0.3em]">
-               <span className="text-rose-500 font-black">Today: 20 JAN 2026</span>
+               <span className="text-rose-500 font-black">Today: {displayDate}</span>
                <span className="w-1 h-1 bg-slate-700 rounded-full" />
                Quantum-Grade Modeling Ready
             </p>
@@ -320,7 +455,7 @@ const App: React.FC = () => {
                    AI Intelligence
                 </h2>
                 <p className="text-slate-400 leading-relaxed text-sm font-medium">
-                  "The scraping engine currently targets all Euroleague and NBA games for 20th January 2026, integrating real-time injury data into its projected quarter scores."
+                  "The scraping engine currently targets all Euroleague and NBA games for {queryDate}, integrating real-time injury data into its projected quarter scores."
                 </p>
               </section>
             </div>
@@ -334,6 +469,13 @@ const App: React.FC = () => {
                   <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-900 px-4 py-2 rounded-lg border border-slate-800">
                     Feed: {filteredPredictions.length} Entries
                   </div>
+                  <button 
+                    onClick={() => setIsLiveFeedActive(!isLiveFeedActive)}
+                    className={`flex items-center gap-3 px-6 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${isLiveFeedActive ? 'bg-red-600 border-red-500 text-white animate-pulse' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+                  >
+                    <Radio size={14} />
+                    {isLiveFeedActive ? 'Live Connection Active' : 'Connect Real-Time Feed'}
+                  </button>
                 </div>
                 <div className="flex items-center gap-4">
                   <ListFilter size={20} className="text-rose-500" />
@@ -349,6 +491,9 @@ const App: React.FC = () => {
                     prediction={pred} 
                     onSave={() => handleSaveToHistory(pred)}
                     isSaved={savedHistory.some(p => p.id === pred.id)}
+                    teamLogos={teamLogos}
+                    onUploadLogo={handleLogoUpload}
+                    onResetLogo={handleLogoReset}
                   />
                 ))}
               </div>

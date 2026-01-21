@@ -15,6 +15,13 @@ export interface GameInput {
   context: string;
 }
 
+export interface GameEvent {
+  id: string;
+  time: string;
+  description: string;
+  type: 'score' | 'foul' | 'timeout' | 'period';
+}
+
 export interface PredictionResult {
   matchup: string;
   league: string;
@@ -40,4 +47,9 @@ export interface PredictionResult {
   timestamp: number;
   teamAAvailability: string;
   teamBAvailability: string;
+  // Live Feed Fields
+  isLive?: boolean;
+  currentClock?: string;
+  currentPeriod?: number;
+  liveEvents?: GameEvent[];
 }

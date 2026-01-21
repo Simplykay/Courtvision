@@ -140,6 +140,10 @@ export const analyzeGame = async (gameData: GameInput): Promise<PredictionResult
     teamAAvailability: gameData.teamA.availability,
     teamBAvailability: gameData.teamB.availability,
     id: Math.random().toString(36).substr(2, 9),
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    isLive: false,
+    currentClock: "12:00",
+    currentPeriod: 1,
+    liveEvents: []
   };
 };

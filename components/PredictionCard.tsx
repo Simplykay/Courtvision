@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { PredictionResult } from '../types';
-import { Save, CheckCircle2, ChevronRight, Star, Share2, MapPin, Users, Info, Activity, Radio, Upload, X } from 'lucide-react';
+import { Save, CheckCircle2, ChevronRight, Star, Share2, MapPin, Users, Info, Activity, Radio, Upload, X, Wifi, WifiOff } from 'lucide-react';
 
 interface PredictionCardProps {
   prediction: PredictionResult;
@@ -10,6 +10,7 @@ interface PredictionCardProps {
   teamLogos?: Record<string, string>;
   onUploadLogo?: (teamName: string, file: File) => void;
   onResetLogo?: (teamName: string) => void;
+  onToggleFollow?: () => void;
 }
 
 const TeamAvatar: React.FC<{
@@ -73,7 +74,7 @@ const TeamAvatar: React.FC<{
   );
 };
 
-const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isSaved, teamLogos, onUploadLogo, onResetLogo }) => {
+const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isSaved, teamLogos, onUploadLogo, onResetLogo, onToggleFollow }) => {
   const teamA = prediction.matchup.split(' vs ')[0];
   const teamB = prediction.matchup.split(' vs ')[1];
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -86,11 +87,11 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isS
   }, [prediction.liveEvents]);
 
   return (
-    <div className="bg-[#111827] border border-slate-800 rounded-lg overflow-hidden shadow-2xl transition-all hover:border-slate-700 w-full max-w-2xl mx-auto flex flex-col relative">
+    <div className={`bg-[#111827] border rounded-lg overflow-hidden shadow-2xl transition-all w-full max-w-2xl mx-auto flex flex-col relative ${prediction.isFollowing ? 'border-rose-500/50 shadow-rose-900/10' : 'border-slate-800 hover:border-slate-700'}`}>
       
       {/* Live Indicator Border */}
-      {prediction.isLive && (
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-rose-500 animate-pulse z-20" />
+      {prediction.isFollowing && (
+        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 to-rose-500 animate-pulse z-20" />
       )}
 
       {/* Top App Bar Simulation */}
@@ -98,16 +99,34 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isS
         <div className="flex items-center gap-4">
           <ChevronRight className="rotate-180 cursor-pointer text-slate-400" size={24} />
           <div className="flex items-center gap-2">
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${prediction.isLive ? 'bg-red-600 animate-pulse' : 'basketball-gradient'}`}>
-               {prediction.isLive ? <Radio size={12} className="text-white" /> : <span className="text-[10px] font-bold">🏀</span>}
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${prediction.isFollowing ? 'bg-red-600 animate-pulse' : 'basketball-gradient'}`}>
+               {prediction.isFollowing ? <Radio size={12} className="text-white" /> : <span className="text-[10px] font-bold">🏀</span>}
             </div>
-            <span className="font-bold text-sm tracking-tight">{prediction.isLive ? 'LIVE FEED ACTIVE' : 'Basketball Prediction'}</span>
-            <ChevronRight className="rotate-90 text-slate-500" size={14} />
+            <span className={`font-bold text-sm tracking-tight ${prediction.isFollowing ? 'text-red-400' : 'text-slate-200'}`}>
+              {prediction.isFollowing ? 'LIVE TRACKING ACTIVE' : 'Basketball Prediction'}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-slate-400">
-          <Share2 size={20} className="hover:text-white cursor-pointer" />
-          <Star size={20} className="hover:text-yellow-400 cursor-pointer" />
+        <div className="flex items-center gap-3 text-slate-400">
+          {onToggleFollow && (
+            <button 
+              onClick={onToggleFollow}
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${
+                prediction.isFollowing 
+                ? 'bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500 hover:text-white' 
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              {prediction.isFollowing ? (
+                <><Wifi size={12} /> Connected</>
+              ) : (
+                <><WifiOff size={12} /> Follow</>
+              )}
+            </button>
+          )}
+          <div className="w-px h-4 bg-slate-700 mx-1" />
+          <Share2 size={18} className="hover:text-white cursor-pointer" />
+          <Star size={18} className="hover:text-yellow-400 cursor-pointer" />
         </div>
       </div>
 
@@ -159,8 +178,8 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isS
             {prediction.isLive ? (
               <div className="flex flex-col items-center gap-1 mt-3 animate-in fade-in zoom-in duration-300">
                 <div className="flex items-center gap-2 bg-red-600/20 px-3 py-1 rounded-full border border-red-600/30">
-                   <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                   <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Q{prediction.currentPeriod} • {prediction.currentClock}</span>
+                   <div className={`w-1.5 h-1.5 rounded-full ${prediction.isFollowing ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
+                   <span className={`text-[10px] font-black uppercase tracking-widest ${prediction.isFollowing ? 'text-red-500' : 'text-slate-500'}`}>Q{prediction.currentPeriod} • {prediction.currentClock}</span>
                 </div>
               </div>
             ) : (
@@ -189,24 +208,33 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, onSave, isS
         </div>
 
         {/* Live Ticker Area */}
-        {prediction.isLive && (prediction.liveEvents?.length || 0) > 0 && (
-          <div className="w-full mt-8 bg-black/40 border border-white/5 rounded-lg overflow-hidden flex flex-col">
-            <div className="bg-red-600/10 border-b border-red-500/10 px-3 py-1.5 flex justify-between items-center">
-               <span className="text-[9px] font-black text-red-400 uppercase tracking-widest flex items-center gap-2">
+        {prediction.isLive && (
+          <div className="w-full mt-8 bg-black/40 border border-white/5 rounded-lg overflow-hidden flex flex-col transition-all">
+            <div className={`border-b px-3 py-1.5 flex justify-between items-center ${prediction.isFollowing ? 'bg-red-600/10 border-red-500/10' : 'bg-slate-800/30 border-slate-700/30'}`}>
+               <span className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 ${prediction.isFollowing ? 'text-red-400' : 'text-slate-500'}`}>
                  <Activity size={10} /> Live Play-by-Play
+                 <span className={`ml-1 px-1.5 py-0.5 rounded text-[8px] ${prediction.isFollowing ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                    {prediction.liveEvents?.length || 0}
+                 </span>
                </span>
-               <span className="text-[9px] font-mono text-slate-500">REAL-TIME</span>
+               <span className="text-[9px] font-mono text-slate-500">{prediction.isFollowing ? 'REAL-TIME CONNECTION' : 'PAUSED'}</span>
             </div>
-            <div ref={scrollRef} className="h-24 overflow-y-auto custom-scrollbar p-3 space-y-2 flex flex-col-reverse">
-              {prediction.liveEvents?.slice().reverse().map((event) => (
-                <div key={event.id} className="flex gap-3 items-start animate-in slide-in-from-left-2 fade-in duration-300">
-                  <span className="text-[10px] font-mono text-slate-500 shrink-0 pt-0.5">{event.time}</span>
-                  <span className="text-[11px] font-medium text-slate-300 leading-tight">
-                    {event.description}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {prediction.isFollowing && (prediction.liveEvents?.length || 0) > 0 ? (
+              <div ref={scrollRef} className="h-24 overflow-y-auto custom-scrollbar p-3 space-y-2 flex flex-col-reverse">
+                {prediction.liveEvents?.slice().reverse().map((event) => (
+                  <div key={event.id} className="flex gap-3 items-start animate-in slide-in-from-left-2 fade-in duration-300">
+                    <span className="text-[10px] font-mono text-slate-500 shrink-0 pt-0.5">{event.time}</span>
+                    <span className="text-[11px] font-medium text-slate-300 leading-tight">
+                      {event.description}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+               <div className="p-4 text-center text-[10px] text-slate-600 uppercase font-black tracking-widest italic">
+                  {prediction.isFollowing ? 'Waiting for tip-off...' : 'Connect feed to view events'}
+               </div>
+            )}
           </div>
         )}
 

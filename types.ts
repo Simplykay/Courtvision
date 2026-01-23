@@ -49,6 +49,7 @@ export interface PredictionResult {
   teamBAvailability: string;
   // Live Feed Fields
   isLive?: boolean;
+  isFollowing?: boolean;
   currentClock?: string;
   currentPeriod?: number;
   liveEvents?: GameEvent[];

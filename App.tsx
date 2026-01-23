@@ -28,9 +28,6 @@ const App: React.FC = () => {
   const [isScraping, setIsScraping] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; message?: string } | null>(null);
   
-  // Live Feed State
-  const [isLiveFeedActive, setIsLiveFeedActive] = useState(false);
-  
   const [sessionPredictions, setSessionPredictions] = useState<PredictionResult[]>([]);
   const [savedHistory, setSavedHistory] = useState<PredictionResult[]>(() => {
     const saved = localStorage.getItem('courtvision_history');
@@ -75,90 +72,105 @@ const App: React.FC = () => {
     localStorage.setItem('courtvision_history', JSON.stringify(savedHistory));
   }, [savedHistory]);
 
-  // LIVE FEED SIMULATION ENGINE
+  // REFINED LIVE FEED SIMULATION ENGINE
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
-    if (isLiveFeedActive && sessionPredictions.length > 0) {
+    const hasFollowedGames = sessionPredictions.some(p => p.isFollowing);
+
+    if (hasFollowedGames) {
       interval = setInterval(() => {
         setSessionPredictions(prev => {
-          const next = [...prev];
-          // Pick a random game to update
-          const idx = Math.floor(Math.random() * next.length);
-          const game = { ...next[idx] };
-          
-          if (!game.isLive) {
-            game.isLive = true;
-            game.currentPeriod = 1;
-            game.currentClock = "11:58";
-            game.liveEvents = [{ id: Date.now().toString(), time: "11:58", description: "Tip-off! Game has started.", type: 'period' }];
-          } else {
-            // Parse clock
-            let [min, sec] = (game.currentClock || "12:00").split(':').map(Number);
-            let totalSec = min * 60 + sec;
+          return prev.map(game => {
+             // Only update followed games
+             if (!game.isFollowing) return game;
+
+             const next = { ...game };
+
+             // Initialize live state if needed
+             if (!next.isLive) {
+                next.isLive = true;
+                next.currentPeriod = 1;
+                next.currentClock = "12:00";
+                next.liveEvents = [{ id: Date.now().toString(), time: "12:00", description: "Connection established. Tracking started.", type: 'period' }];
+                return next;
+             }
+
+             // Simulation Logic
+             let [min, sec] = (next.currentClock || "12:00").split(':').map(Number);
+             let totalSec = min * 60 + sec;
             
-            if (totalSec > 0) {
-              const drop = Math.floor(Math.random() * 20) + 10; // Drop 10-30 seconds
-              totalSec = Math.max(0, totalSec - drop);
-              min = Math.floor(totalSec / 60);
-              sec = totalSec % 60;
-              game.currentClock = `${min}:${sec < 10 ? '0'+sec : sec}`;
+             if (totalSec > 0) {
+               // Fast forward slightly for effect (5 seconds per tick)
+               const drop = 5; 
+               totalSec = Math.max(0, totalSec - drop);
+               min = Math.floor(totalSec / 60);
+               sec = totalSec % 60;
+               next.currentClock = `${min}:${sec < 10 ? '0'+sec : sec}`;
 
-              // Random Event
-              const eventChance = Math.random();
-              const teamA = game.matchup.split(' vs ')[0];
-              const teamB = game.matchup.split(' vs ')[1];
+               // Random Event
+               if (Math.random() > 0.75) { // 25% chance of event per tick
+                  const teamA = next.matchup.split(' vs ')[0];
+                  const teamB = next.matchup.split(' vs ')[1];
+                  const isTeamA = Math.random() > 0.5;
+                  
+                  // Score or generic event
+                  if (Math.random() > 0.3) {
+                     const points = Math.random() > 0.7 ? 3 : 2;
+                     const scorer = isTeamA ? teamA : teamB;
+                     
+                     if (isTeamA) next.predictedScore.teamA += points;
+                     else next.predictedScore.teamB += points;
 
-              if (eventChance > 0.6) {
-                 const isTeamA = Math.random() > 0.5;
-                 const points = Math.random() > 0.7 ? 3 : 2;
-                 const scorer = isTeamA ? teamA : teamB;
-                 
-                 if (isTeamA) game.predictedScore.teamA += points;
-                 else game.predictedScore.teamB += points;
-
-                 game.liveEvents = [
-                   ...(game.liveEvents || []), 
-                   { 
-                     id: Date.now().toString(), 
-                     time: game.currentClock, 
-                     description: `${scorer} scores ${points} points!`, 
-                     type: 'score' 
-                   }
-                 ];
-              } else if (eventChance < 0.2) {
-                 game.liveEvents = [
-                   ...(game.liveEvents || []), 
-                   { 
-                     id: Date.now().toString(), 
-                     time: game.currentClock, 
-                     description: "Defensive rebound secured.", 
-                     type: 'score' 
-                   }
-                 ];
-              }
-            } else {
-               // End of Period logic could go here, for now just reset to next period
-               if ((game.currentPeriod || 1) < 4) {
-                 game.currentPeriod = (game.currentPeriod || 1) + 1;
-                 game.currentClock = "12:00";
-                 game.liveEvents = [
-                   ...(game.liveEvents || []), 
-                   { id: Date.now().toString(), time: "12:00", description: `Start of Q${game.currentPeriod}`, type: 'period' }
-                 ];
+                     next.liveEvents = [
+                       ...(next.liveEvents || []), 
+                       { 
+                         id: Date.now().toString() + Math.random(), 
+                         time: next.currentClock, 
+                         description: `${scorer} scores ${points} pts`, 
+                         type: 'score' 
+                       }
+                     ];
+                  } else {
+                     next.liveEvents = [
+                       ...(next.liveEvents || []), 
+                       { 
+                         id: Date.now().toString() + Math.random(), 
+                         time: next.currentClock, 
+                         description: `${isTeamA ? teamA : teamB} defensive stop.`, 
+                         type: 'score' 
+                       }
+                     ];
+                  }
                }
-            }
-          }
-          
-          next[idx] = game;
-          return next;
+             } else {
+                // End of Period Logic
+                if ((next.currentPeriod || 1) < 4) {
+                  next.currentPeriod = (next.currentPeriod || 1) + 1;
+                  next.currentClock = "12:00";
+                  next.liveEvents = [
+                    ...(next.liveEvents || []), 
+                    { id: Date.now().toString(), time: "12:00", description: `Start of Q${next.currentPeriod}`, type: 'period' }
+                  ];
+                }
+             }
+             return next;
+          });
         });
-      }, 2000); // Update frequency
+      }, 1000);
     }
 
     return () => clearInterval(interval);
-  }, [isLiveFeedActive, sessionPredictions.length]);
+  }, [sessionPredictions.map(p => p.isFollowing).join(',')]); // Dependency on which games are followed
 
+  const handleToggleFollow = (id: string) => {
+    setSessionPredictions(prev => prev.map(p => {
+      if (p.id === id) {
+        return { ...p, isFollowing: !p.isFollowing };
+      }
+      return p;
+    }));
+  };
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -469,13 +481,6 @@ const App: React.FC = () => {
                   <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-900 px-4 py-2 rounded-lg border border-slate-800">
                     Feed: {filteredPredictions.length} Entries
                   </div>
-                  <button 
-                    onClick={() => setIsLiveFeedActive(!isLiveFeedActive)}
-                    className={`flex items-center gap-3 px-6 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${isLiveFeedActive ? 'bg-red-600 border-red-500 text-white animate-pulse' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
-                  >
-                    <Radio size={14} />
-                    {isLiveFeedActive ? 'Live Connection Active' : 'Connect Real-Time Feed'}
-                  </button>
                 </div>
                 <div className="flex items-center gap-4">
                   <ListFilter size={20} className="text-rose-500" />
@@ -494,6 +499,7 @@ const App: React.FC = () => {
                     teamLogos={teamLogos}
                     onUploadLogo={handleLogoUpload}
                     onResetLogo={handleLogoReset}
+                    onToggleFollow={() => handleToggleFollow(pred.id)}
                   />
                 ))}
               </div>

@@ -3,6 +3,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { analyzeGame, fetchLiveGames } from './services/geminiService';
 import { GameInput, PredictionResult } from './types';
 import PredictionCard from './components/PredictionCard';
+import { Logo } from './components/Logo';
 import { 
   Activity, 
   LayoutDashboard, 
@@ -19,7 +20,10 @@ import {
   Search,
   Zap,
   Radio,
-  Wifi
+  Wifi,
+  Trophy,
+  Target,
+  Percent
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -58,6 +62,7 @@ const App: React.FC = () => {
   }, [teamLogos]);
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [confidenceLevelFilter, setConfidenceLevelFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All');
   const [sortBy, setSortBy] = useState<'Newest' | 'Confidence'>('Newest');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -303,10 +308,28 @@ const App: React.FC = () => {
     if (statusFilter !== 'All') {
       list = list.filter(p => p.teamAAvailability.includes(statusFilter) || p.teamBAvailability.includes(statusFilter));
     }
+    
+    // Confidence Level Filter
+    if (confidenceLevelFilter !== 'All') {
+      list = list.filter(p => p.confidenceLevel === confidenceLevelFilter);
+    }
+
     if (sortBy === 'Confidence') list.sort((a, b) => b.confidence - a.confidence);
     else list.sort((a, b) => b.timestamp - a.timestamp);
     return list;
-  }, [sessionPredictions, statusFilter, sortBy]);
+  }, [sessionPredictions, statusFilter, sortBy, confidenceLevelFilter]);
+
+  const topPicks = useMemo(() => {
+    return [...sessionPredictions]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5);
+  }, [sessionPredictions]);
+
+  const averageConfidence = useMemo(() => {
+    if (topPicks.length === 0) return 0;
+    const total = topPicks.reduce((acc, curr) => acc + curr.confidence, 0);
+    return (total / topPicks.length).toFixed(1);
+  }, [topPicks]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0b1120] text-slate-200">
@@ -314,9 +337,7 @@ const App: React.FC = () => {
       <div className="fixed left-0 top-0 h-full w-20 md:w-64 bg-[#0f172a] border-r border-slate-800 z-50 flex flex-col">
         <div className="p-4 md:p-6 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 basketball-gradient rounded-xl flex items-center justify-center shadow-lg shadow-rose-500/20 shrink-0">
-              <Award className="text-white w-6 h-6" />
-            </div>
+            <Logo className="w-10 h-10 shadow-lg shadow-rose-500/20 shrink-0" />
             <span className="hidden md:block brand-font text-2xl font-bold text-white tracking-wider">COURTVISION</span>
           </div>
         </div>
@@ -476,15 +497,92 @@ const App: React.FC = () => {
 
         {activeTab === 'predictions' && (
           <div className="space-y-10 animate-in fade-in slide-in-from-right-6 duration-500 max-w-4xl mx-auto w-full">
-             <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-[#0f172a] border border-slate-800 p-8 rounded-3xl shadow-2xl">
-                <div className="flex items-center gap-8">
-                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-900 px-4 py-2 rounded-lg border border-slate-800">
+            
+             {/* TOP 5 ELITE PICKS SECTION */}
+             {topPicks.length > 0 && (
+                <div className="w-full bg-gradient-to-r from-amber-900/20 to-slate-900 border border-amber-500/30 rounded-3xl p-6 relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-50" />
+                   
+                   <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-amber-500/20 rounded-lg text-amber-500">
+                            <Trophy size={20} />
+                         </div>
+                         <div>
+                            <h2 className="text-lg font-black text-amber-100 uppercase tracking-wider brand-font italic">Elite Selection // Top 5</h2>
+                            <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-widest">Highest Probability Outcome Models</p>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-amber-500/20">
+                         <Target size={16} className="text-emerald-500" />
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Avg. Confidence:</span>
+                         <span className="text-lg font-black text-white">{averageConfidence}%</span>
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                      {topPicks.map((pick, i) => {
+                         const teamA = pick.matchup.split(' vs ')[0];
+                         const teamB = pick.matchup.split(' vs ')[1];
+                         const winnerName = pick.winner.includes(teamA) ? teamA : teamB;
+                         return (
+                            <div key={pick.id} className="bg-black/40 border border-amber-500/20 rounded-xl p-4 flex flex-col justify-between hover:bg-amber-900/10 transition-colors group relative overflow-hidden">
+                               <div className="absolute -right-3 -top-3 text-[50px] font-black text-white/5 italic brand-font select-none">{i+1}</div>
+                               <div className="relative z-10">
+                                  <div className="flex items-center gap-1.5 text-[8px] font-mono text-slate-400 mb-2 opacity-80">
+                                    <Clock size={10} />
+                                    <span>
+                                       {new Date(pick.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • {new Date(pick.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <div className="text-[9px] text-amber-500 font-black uppercase tracking-widest mb-2 flex justify-between">
+                                    <span>{pick.league}</span>
+                                    <span className="text-white">{pick.confidence}%</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1 mb-3">
+                                      <span className={`text-[10px] font-bold uppercase ${pick.winner.includes(teamA) ? 'text-white' : 'text-slate-500'}`}>{teamA}</span>
+                                      <span className={`text-[10px] font-bold uppercase ${pick.winner.includes(teamB) ? 'text-white' : 'text-slate-500'}`}>{teamB}</span>
+                                  </div>
+                               </div>
+                               <div className="relative z-10 pt-3 border-t border-white/5">
+                                  <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Projected Winner</div>
+                                  <div className="text-xs font-black text-amber-400 uppercase truncate">{winnerName}</div>
+                                  <div className="text-[9px] text-slate-400 mt-1 font-mono">O/U {pick.totalPoints}</div>
+                               </div>
+                            </div>
+                         );
+                      })}
+                   </div>
+                </div>
+             )}
+
+             <div className="flex flex-col xl:flex-row items-center justify-between gap-6 bg-[#0f172a] border border-slate-800 p-8 rounded-3xl shadow-2xl">
+                <div className="flex flex-col sm:flex-row items-center gap-6 w-full xl:w-auto">
+                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-900 px-4 py-2 rounded-lg border border-slate-800 whitespace-nowrap">
                     Feed: {filteredPredictions.length} Entries
                   </div>
+                  
+                  {/* Confidence Filter Controls */}
+                  <div className="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800 overflow-x-auto max-w-full">
+                    {['All', 'High', 'Medium', 'Low'].map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => setConfidenceLevelFilter(level as any)}
+                        className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${
+                          confidenceLevelFilter === level 
+                            ? 'bg-rose-600 text-white shadow-md' 
+                            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-4">
                   <ListFilter size={20} className="text-rose-500" />
-                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Displaying Active Projections</span>
+                  <span className="hidden sm:inline text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Active Projections</span>
                 </div>
              </div>
 
